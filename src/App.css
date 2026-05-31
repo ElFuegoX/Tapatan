@@ -674,6 +674,7 @@
   flex: 1;
   min-height: 0;
   gap: 12px;
+  position: relative;
 }
 
 /* Stats bar */
@@ -941,14 +942,15 @@
   }
 }
 
-/* Zoom controls */
+/* Zoom controls — FIXED dans le coin du tree-panel */
 .tree-zoom-controls {
   position: absolute;
-  bottom: 12px;
+  bottom: 52px; /* au-dessus de la légende */
   right: 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  z-index: 20;
 }
 
 .tree-zoom-controls button {
@@ -957,7 +959,7 @@
   padding: 0 10px;
   height: 34px;
   border: 1px solid var(--bg-glass-border);
-  background: rgba(18, 19, 35, 0.9);
+  background: rgba(18, 19, 35, 0.95);
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -968,6 +970,7 @@
   justify-content: center;
   transition: all var(--transition-fast);
   backdrop-filter: blur(10px);
+  white-space: nowrap;
 }
 
 .tree-zoom-controls button:hover {
@@ -979,42 +982,42 @@
 /* Legend styling */
 .tree-legend {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   justify-content: center;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  padding: 6px 0;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
+  gap: 5px;
+  font-size: 0.7rem;
   color: var(--text-secondary);
 }
 
-.legend-ring {
+.legend-swatch {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
-.legend-ring.filled-ring {
-  background: var(--accent-blue);
-  border: 1px solid #ffffff;
+.legend-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
 }
 
-.legend-ring.outline-ring {
-  background: #ffffff;
-  border: 2.5px solid var(--accent-blue);
-}
-
-.legend-pruned {
-  background: rgba(51, 65, 85, 0.4);
-  border: 1.5px dashed var(--text-muted);
-  border-radius: 50%;
-  width: 12px;
-  height: 12px;
+.legend-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--bg-glass-border);
+  margin: 0 4px;
 }
 
 /* ========================================
@@ -1071,3 +1074,38 @@
     flex-wrap: wrap;
   }
 }
+
+/* ========================================
+   GLOWING BEST PATH (PRINCIPAL VARIATION)
+   ======================================== */
+
+.best-path-glow {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.8));
+  animation: bestPathPulse 2s ease-in-out infinite;
+}
+
+@keyframes bestPathPulse {
+  0%, 100% {
+    opacity: 0.7;
+    stroke-width: 2.2px;
+  }
+  50% {
+    opacity: 1;
+    stroke-width: 3.5px;
+  }
+}
+
+.tree-edge-best-path {
+  stroke: #10b981 !important;
+  stroke-width: 3px !important;
+  opacity: 0.95 !important;
+}
+
+.tree-edge-best-path-glow {
+  stroke: #10b981;
+  stroke-width: 7px;
+  opacity: 0.3;
+  filter: blur(3px);
+  stroke-linecap: round;
+}
+

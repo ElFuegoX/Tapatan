@@ -9,7 +9,7 @@ const NODE_W = R * 2;
 const NODE_H = R * 2;
 const X_MARGIN = 160; // Marge gauche pour laisser la place aux étiquettes des niveaux
 
-function layoutTree(root, maxDepthVisible = 4) {
+function layoutTree(root, bestPathNodeIds, maxDepthVisible = 4) {
   if (!root) return { nodes: [], edges: [], width: 0, height: 0 };
 
   const nodes = [];
@@ -49,6 +49,7 @@ function layoutTree(root, maxDepthVisible = 4) {
           y2: (depth + 1) * (NODE_H + LEVEL_GAP) + 40,
           pruned: child.pruned,
           depth: depth + 1, // Utilisé pour le retard de l'animation de liaison
+          isBestPath: bestPathNodeIds && bestPathNodeIds.has(node.id) && bestPathNodeIds.has(child.id),
         });
         childLeft += child._width + SIBLING_GAP;
       }
@@ -155,13 +156,37 @@ function MiniBoard({ board }) {
 
 export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
   const containerRef = useRef(null);
+  const panelRef = useRef(null);
   const [hoveredNodeData, setHoveredNodeData] = useState(null); // Informations pour l'infobulle flottante mobile
   const [scale, setScale] = useState(1); // Facteur de zoom (défilement natif via transform)
 
+  // Calcule dynamiquement le chemin des coups optimaux (Principal Variation)
+  const bestPathNodeIds = useMemo(() => {
+    const pathIds = new Set();
+    if (!tree) return pathIds;
+
+    let current = tree;
+    pathIds.add(current.id);
+
+    while (current && current.children && current.children.length > 0) {
+      // Recherche le fils ayant la même valeur d'évaluation que le parent (chemin optimal)
+      const bestChild = current.children.find(
+        child => !child.pruned && child.value === current.value
+      );
+      if (bestChild) {
+        pathIds.add(bestChild.id);
+        current = bestChild;
+      } else {
+        break;
+      }
+    }
+    return pathIds;
+  }, [tree]);
+
   const layout = useMemo(() => {
     if (!tree) return null;
-    return layoutTree(tree, maxDepthVisible);
-  }, [tree, maxDepthVisible]);
+    return layoutTree(tree, bestPathNodeIds, maxDepthVisible);
+  }, [tree, bestPathNodeIds, maxDepthVisible]);
 
   // Réinitialiser le zoom à 1:1 et faire défiler vers le centre haut
   const centerTreeTop = useCallback(() => {
@@ -198,8 +223,8 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
 
   // Mouvements de souris pour positionner l'infobulle flottante avec décalage de sécurité (sans clignotement)
   const handleNodeMouseEnter = (node, e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
     // Décalage de 20 pixels en bas et à droite pour que le curseur ne chevauche JAMAIS l'infobulle
     const x = e.clientX - rect.left + 20;
     const y = e.clientY - rect.top + 20;
@@ -207,8 +232,8 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
   };
 
   const handleNodeMouseMove = (node, e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left + 20;
     const y = e.clientY - rect.top + 20;
     setHoveredNodeData(prev => prev ? { ...prev, x, y } : null);
@@ -249,7 +274,7 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
   const levels = Array.from(new Set(layout.nodes.map(n => n._depth))).sort((a, b) => a - b);
 
   return (
-    <div className="tree-panel">
+    <div className="tree-panel" ref={panelRef}>
       {/* Barre des statistiques (sans icônes) */}
       <div className="tree-stats">
         <div className="stat-chip stat-explored">
@@ -338,28 +363,40 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
 
             {/* Tracé des liaisons (Edges) animées en cascade progressive */}
             {layout.edges.map((edge, i) => (
-              <line
-                key={`e-${i}`}
-                x1={edge.x1}
-                y1={edge.y1}
-                x2={edge.x2}
-                y2={edge.y2}
-                className={`tree-edge${edge.pruned ? ' tree-edge-pruned' : ''} build-animation-line`}
-                style={{
-                  animationDelay: `${edge.depth * 150}ms`, // Décalage pour construction progressive
-                }}
-              />
+              <g key={`e-group-${i}`}>
+                {/* Lueur néon sous le meilleur chemin */}
+                {edge.isBestPath && (
+                  <line
+                    x1={edge.x1}
+                    y1={edge.y1}
+                    x2={edge.x2}
+                    y2={edge.y2}
+                    className="tree-edge-best-path-glow"
+                  />
+                )}
+                <line
+                  x1={edge.x1}
+                  y1={edge.y1}
+                  x2={edge.x2}
+                  y2={edge.y2}
+                  className={`tree-edge${edge.pruned ? ' tree-edge-pruned' : ''}${edge.isBestPath ? ' tree-edge-best-path' : ''} build-animation-line`}
+                  style={{
+                    animationDelay: `${edge.depth * 150}ms`, // Décalage pour construction progressive
+                  }}
+                />
+              </g>
             ))}
 
             {/* Tracé des nœuds circulaires animés en cascade progressive */}
             {layout.nodes.map((node) => {
               const styles = getNodeStyles(node.value, node.pruned, node.isMaximizing);
               const isHovered = hoveredNodeData?.node?.id === node.id;
+              const isOnBestPath = bestPathNodeIds.has(node.id);
 
               return (
                 <g
                   key={node.id}
-                  className={`tree-node${node.pruned ? ' tree-node-pruned' : ''}${isHovered ? ' tree-node-hovered' : ''} build-animation-node`}
+                  className={`tree-node${node.pruned ? ' tree-node-pruned' : ''}${isHovered ? ' tree-node-hovered' : ''}${isOnBestPath ? ' tree-node-best-path' : ''} build-animation-node`}
                   style={{ 
                     cursor: 'pointer',
                     animationDelay: `${node.depth * 150}ms`, // Décalage pour construction progressive
@@ -368,8 +405,21 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
                   onMouseMove={(e) => handleNodeMouseMove(node, e)}
                   onMouseLeave={handleNodeMouseLeave}
                 >
-                  {/* Effet de lueur extérieure */}
-                  {styles.glow !== 'none' && (
+                  {/* Halo néon vert externe pour les nœuds sur le meilleur chemin */}
+                  {isOnBestPath && (
+                    <circle
+                      cx={node._x}
+                      cy={node._y}
+                      r={R + 5}
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="2.5"
+                      className="best-path-glow"
+                    />
+                  )}
+
+                  {/* Effet de lueur extérieure standard */}
+                  {styles.glow !== 'none' && !isOnBestPath && (
                     <circle
                       cx={node._x}
                       cy={node._y}
@@ -387,8 +437,8 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
                     cy={node._y}
                     r={R}
                     fill={styles.fill}
-                    stroke={styles.stroke}
-                    strokeWidth={styles.borderWidth}
+                    stroke={isOnBestPath ? '#10b981' : styles.stroke}
+                    strokeWidth={isOnBestPath ? 2.5 : styles.borderWidth}
                     strokeDasharray={styles.dashArray}
                     className="tree-node-circle"
                   />
@@ -400,7 +450,7 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
                     textAnchor="middle"
                     dominantBaseline="central"
                     className="tree-node-value-circle"
-                    style={{ fill: styles.textColor }}
+                    style={{ fill: isOnBestPath ? (node.isMaximizing ? '#ffffff' : '#10b981') : styles.textColor }}
                   >
                     {formatValue(node.value, node.pruned)}
                   </text>
@@ -409,112 +459,138 @@ export default function DecisionTree({ tree, stats, maxDepthVisible = 4 }) {
             })}
           </svg>
         </div>
-
-        {/* INFOBULLE FLOTTANTE MOBILE (Suit le curseur avec décalage de sécurité) */}
-        {hoveredNodeData && hoveredNodeData.node && (
-          <div
-            className="tree-tooltip-card pointer-events-none"
-            style={{
-              position: 'absolute',
-              left: `${hoveredNodeData.x}px`,
-              top: `${hoveredNodeData.y}px`,
-              zIndex: 100,
-            }}
-          >
-            <div className="tooltip-header">
-              <span className="tooltip-move">{hoveredNodeData.node.moveLabel}</span>
-              <span className={`tooltip-player-badge ${hoveredNodeData.node.isMaximizing ? 'max-badge' : 'min-badge'}`}>
-                {hoveredNodeData.node.isMaximizing ? 'MAX (IA)' : 'MIN (Vous)'}
-              </span>
-            </div>
-            <div className="tooltip-body">
-              <div className="tooltip-stat">
-                <span className="label">Valeur :</span>
-                <span className="value">
-                  {hoveredNodeData.node.pruned ? 'Élagué' : formatValue(hoveredNodeData.node.value, false)}
-                </span>
-              </div>
-              <div className="tooltip-stat">
-                <span className="label">Profondeur :</span>
-                <span className="value">{hoveredNodeData.node.depth}</span>
-              </div>
-              {!hoveredNodeData.node.pruned && (
-                <div className="tooltip-stat">
-                  <span className="label">Limites :</span>
-                  <span className="value ab-values">
-                    α: {formatAB(hoveredNodeData.node.alpha)} &nbsp;|&nbsp; β: {formatAB(hoveredNodeData.node.beta)}
-                  </span>
-                </div>
-              )}
-              {hoveredNodeData.node.pruned && (
-                <div className="tooltip-pruned-alert">
-                  Branche élaguée (β ≤ α)
-                </div>
-              )}
-              {hoveredNodeData.node.boardSnapshot && (
-                <div className="tooltip-board-preview">
-                  <span className="label">Plateau :</span>
-                  <MiniBoard board={hoveredNodeData.node.boardSnapshot} />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Boutons de préréglage du zoom et de recentrage sécurisés */}
-        <div className="tree-zoom-controls" onMouseDown={(e) => e.stopPropagation()}>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setScale(prev => Math.min(2.5, prev * 1.2));
-            }} 
-            title="Zoom +"
-          >
-            +
-          </button>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setScale(prev => Math.max(0.2, prev * 0.8));
-            }} 
-            title="Zoom −"
-          >
-            −
-          </button>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              centerTreeTop();
-            }} 
-            title="Recentrer (Taille réelle 1:1)"
-          >
-            1:1
-          </button>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              fitTreeToView();
-            }} 
-            title="Ajuster à l'écran"
-          >
-            Ajuster
-          </button>
-        </div>
       </div>
 
-      {/* Légende mise à jour selon les consignes */}
+      {/* INFOBULLE FLOTTANTE MOBILE (Gérée dans tree-panel pour rester parfaitement stable indépendamment du scroll) */}
+      {hoveredNodeData && hoveredNodeData.node && (
+        <div
+          className="tree-tooltip-card pointer-events-none"
+          style={{
+            position: 'absolute',
+            left: `${hoveredNodeData.x}px`,
+            top: `${hoveredNodeData.y}px`,
+            zIndex: 100,
+          }}
+        >
+          <div className="tooltip-header">
+            <span className="tooltip-move">{hoveredNodeData.node.moveLabel}</span>
+            <span className={`tooltip-player-badge ${hoveredNodeData.node.isMaximizing ? 'max-badge' : 'min-badge'}`}>
+              {hoveredNodeData.node.isMaximizing ? 'MAX (IA)' : 'MIN (Vous)'}
+            </span>
+          </div>
+          <div className="tooltip-body">
+            <div className="tooltip-stat">
+              <span className="label">Valeur :</span>
+              <span className="value">
+                {hoveredNodeData.node.pruned ? 'Élagué' : formatValue(hoveredNodeData.node.value, false)}
+              </span>
+            </div>
+            <div className="tooltip-stat">
+              <span className="label">Profondeur :</span>
+              <span className="value">{hoveredNodeData.node.depth}</span>
+            </div>
+            {!hoveredNodeData.node.pruned && (
+              <div className="tooltip-stat">
+                <span className="label">Limites :</span>
+                <span className="value ab-values">
+                  α: {formatAB(hoveredNodeData.node.alpha)} &nbsp;|&nbsp; β: {formatAB(hoveredNodeData.node.beta)}
+                </span>
+              </div>
+            )}
+            {hoveredNodeData.node.pruned && (
+              <div className="tooltip-pruned-alert">
+                Branche élaguée (β ≤ α)
+              </div>
+            )}
+            {hoveredNodeData.node.boardSnapshot && (
+              <div className="tooltip-board-preview">
+                <span className="label">Plateau :</span>
+                <MiniBoard board={hoveredNodeData.node.boardSnapshot} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Boutons de préréglage du zoom — FIXÉS dans le coin du tree-panel (hors du scroll) */}
+      <div className="tree-zoom-controls" onMouseDown={(e) => e.stopPropagation()}>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            setScale(prev => Math.min(2.5, prev * 1.2));
+          }} 
+          title="Zoom +"
+        >
+          +
+        </button>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            setScale(prev => Math.max(0.2, prev * 0.8));
+          }} 
+          title="Zoom −"
+        >
+          −
+        </button>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            centerTreeTop();
+          }} 
+          title="Recentrer (Taille réelle 1:1)"
+        >
+          1:1
+        </button>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            fitTreeToView();
+          }} 
+          title="Ajuster à l'écran"
+        >
+          Ajuster
+        </button>
+      </div>
+
+      {/* Légende mise à jour selon l'état réel de l'arbre */}
       <div className="tree-legend">
-        <div className="legend-item">
-          <span className="legend-ring filled-ring"></span>
-          <span>Bon pour l'IA (Vert)</span>
+        {/* Partie 1: Évaluation / Valeurs */}
+        <div className="legend-group">
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#10b981' }}></span>
+            <span>Favorable à l'IA (&gt;0)</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#64748b' }}></span>
+            <span>Neutre (0)</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#ef4444' }}></span>
+            <span>Défavorable (&lt;0)</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#8b6c70', border: '1.5px dashed #9b7c80' }}></span>
+            <span>Branche Élaguée (Rouge Gris)</span>
+          </div>
         </div>
-        <div className="legend-item">
-          <span className="legend-ring outline-ring"></span>
-          <span>Mauvais pour l'IA (Rouge)</span>
-        </div>
-        <div className="legend-item">
-          <span className="legend-pruned"></span>
-          <span>Élagué (Rouge Gris)</span>
+
+        {/* Séparateur discret */}
+        <div className="legend-divider"></div>
+
+        {/* Partie 2: Types de Nœuds et Chemin */}
+        <div className="legend-group">
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#64748b', border: '1px solid #fff' }}></span>
+            <span>Nœud MAX (IA - Plein)</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: '#fff', border: '2.5px solid #64748b' }}></span>
+            <span>Nœud MIN (Vous - Contouré)</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-swatch" style={{ background: 'none', border: '2px solid #10b981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.8)' }}></span>
+            <span>Chemin Optimal IA</span>
+          </div>
         </div>
       </div>
     </div>

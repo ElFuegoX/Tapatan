@@ -125,7 +125,7 @@ export default function GameInfo({
             Profondeur max : <strong>{maxDepth}</strong>
           </label>
           <div className="depth-controls">
-            {[2, 3, 4, 5].map(d => (
+            {[2, 3, 4, 5, 6, 7, 8].map(d => (
               <button
                 key={d}
                 className={`depth-btn ${d === maxDepth ? 'depth-active' : ''}`}

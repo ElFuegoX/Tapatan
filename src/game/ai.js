@@ -20,7 +20,7 @@ import {
 function evaluate(board) {
   const result = checkWinner(board);
   if (result) {
-    return result.winner === PLAYER_AI ? 100 : -100;
+    return result.winner === PLAYER_AI ? 1000 : -1000;
   }
   
   // Heuristic: count partial lines
@@ -69,7 +69,12 @@ function createTreeNode(state, depth, alpha, beta, move = null, isMaximizing = t
 
 function minimax(state, depth, isMaximizing, maxDepth, treeNode) {
   const result = checkWinner(state.board);
-  if (result || depth >= maxDepth) {
+  if (result) {
+    const val = result.winner === PLAYER_AI ? (1000 - depth) : (-1000 + depth);
+    treeNode.value = val;
+    return val;
+  }
+  if (depth >= maxDepth) {
     const val = evaluate(state.board);
     treeNode.value = val;
     return val;
@@ -113,7 +118,14 @@ function minimax(state, depth, isMaximizing, maxDepth, treeNode) {
 
 function alphaBeta(state, depth, alpha, beta, isMaximizing, maxDepth, treeNode) {
   const result = checkWinner(state.board);
-  if (result || depth >= maxDepth) {
+  if (result) {
+    const val = result.winner === PLAYER_AI ? (1000 - depth) : (-1000 + depth);
+    treeNode.value = val;
+    treeNode.alpha = alpha;
+    treeNode.beta = beta;
+    return val;
+  }
+  if (depth >= maxDepth) {
     const val = evaluate(state.board);
     treeNode.value = val;
     treeNode.alpha = alpha;
