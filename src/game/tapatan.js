@@ -42,8 +42,8 @@ export const WIN_LINES = [
 
 // Cell states
 export const EMPTY = 0;
-export const PLAYER_HUMAN = 1;  // 'X' — blue
-export const PLAYER_AI = 2;     // 'O' — red/orange
+export const PLAYER_HUMAN = 1;  //  — blue
+export const PLAYER_AI = 2;     //  — red/orange
 
 export function createInitialState() {
   return {

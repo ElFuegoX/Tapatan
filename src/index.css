@@ -3,8 +3,8 @@
 /* ===== Design Tokens ===== */
 :root {
   /* Colors */
-  --bg-primary: #0a0b14;
-  --bg-secondary: #12131f;
+  --bg-primary: rgba(255, 255, 255, 0.03);
+  --bg-secondary: rgba(255, 255, 255, 0.03);
   --bg-card: rgba(18, 19, 35, 0.7);
   --bg-card-hover: rgba(25, 26, 45, 0.8);
   --bg-glass: rgba(255, 255, 255, 0.03);
